@@ -12,22 +12,20 @@ class ProductCache:
         
     async def get_product(self, product_id: str) -> Product | None:
         client = self.__getRedisClient()
-        product_str: Any
+        product_dict: Any
         try:
-            product_str = client.get(product_id)
+            product_dict = client.json().get(product_id)
         except Exception:
             raise Exception(f"An error occurred when getting prodcut {product_id} from Redis")
         finally:
             client.close()
-        if(product_str is None):
+        if(product_dict is None):
             return None
-        product_dict = json.loads(product_str)
-        return Product(id=product_dict["id"], name=product_dict["name"], price=product_dict["price"], category=product_dict["category"])
+        return Product(id=product_dict["id"], name=product_dict["name"], price=product_dict["price"], category=product_dict["category"], description=product_dict["description"])
     async def add_product(self, product: Product)->bool:
-        product_str = json.dumps(product, default=lambda o: o.__dict__)
         client = self.__getRedisClient()
         try:
-            client.set(product.id, product_str)
+            client.json().set(product.id, "$", product.model_dump())
         except Exception:
             raise Exception(f"An error occured when saving product {product.id} to Redis")
         finally:
@@ -35,26 +33,27 @@ class ProductCache:
         return True
     async def get_products(self, product_ids: list[str])->list[Product]:
         client = self.__getRedisClient()
-        products_str = []
+        products_list = []
         products: list[Product] = []
         try:
-            products_str = client.mget(product_ids)
+            products_list = client.json().mget(product_ids, "$")
         except Exception :
             raise Exception(f"An error occurred when getting multiple products")
         finally:
             client.close()
-        for prd in products_str:
-            product_dict = json.loads(prd)
-            products.append(Product(id=product_dict["id"], name=product_dict["name"], price=product_dict["price"], category=product_dict["category"]))
+        prd:Any
+        for prd in products_list:
+            if(prd is not None):
+                products.append(Product(id=prd[0]["id"], name=prd[0]["name"], price=prd[0]["price"], category=prd[0]["category"], description=prd[0]["description"]))
         return products
     async def add_products(self, products: list[Product])->bool:
         client = self.__getRedisClient()
-        products_str: dict[str, str] = dict()
+        products_dict: list[tuple[str, str, Any]] = []
         for product in products:
-            products_str[product.id]=json.dumps(product, default=lambda o: o.__dict__)
+            products_dict.append((product.id, "$", product.model_dump()))
         try:
-            client.mset(products_str)
-        except Exception:
+            client.json().mset(products_dict)
+        except Exception as e:
             raise Exception(f"An error occurred when adding multiple products")
         finally:
             client.close()
