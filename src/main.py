@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Body
 from typing import Annotated
+from pydantic import BaseModel
 from .inventory.inventory_service import InventoryService
 from .inventory.inventory import InventorySummary, Inventory
 from .inventory.inventory import ProductSummary
@@ -51,15 +52,17 @@ async def get_product_count(service: Annotated[InventoryService, Depends(get_inv
     return await service.get_product_count(inventory_id, product_id)
     
 
+class UpdateCountReqeust(BaseModel):
+    quantity: int
+    original_quantity: int | None = None
 @app.post("/v1/inventory/{inventory_id}/products/{product_id}/Count")
 async def update_product_count(
     service: Annotated[InventoryService, Depends(get_inventory_service)],
     inventory_id: str,
     product_id: str,
-    quantity: int,
-    original_quantity: int | None = None) -> dict:
+    updateCountRequest: Annotated[UpdateCountReqeust, Body()]) -> dict:
     try:
-        result = await service.update_product_count(inventory_id, product_id, quantity, original_quantity)
+        result = await service.update_product_count(inventory_id, product_id, updateCountRequest.quantity, updateCountRequest.original_quantity)
         return {"success": result }
     except RemainingProductCountChangeError as e:
         return {"success": False, "new_count": e.newCount}
